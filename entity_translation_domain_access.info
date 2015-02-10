@@ -1,0 +1,9 @@
+name = Entity translation domain access
+description = Resticts entity translation basing on user assigned domains.
+package = Custom
+core = 7.x
+
+dependencies[] = domain
+dependencies[] = entity_translation
+
+files[] = includes/EntityTranslationDomainAccess.inc

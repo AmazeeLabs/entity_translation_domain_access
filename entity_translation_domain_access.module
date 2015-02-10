@@ -1,0 +1,133 @@
+<?php
+
+/**
+ * Implements hook_permission().
+ */
+function entity_translation_domain_access_permission() {
+  return array(
+    'bypass entity translation domain access' => array(
+      'title' => t('Bypass entity translation domain access'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_module_implements_alter().
+ */
+function entity_translation_domain_access_module_implements_alter(&$implementations, $hook) {
+  if ($hook == 'menu_alter') {
+    // Alter menu after the entity_translation does this.
+    $group = $implementations['entity_translation_domain_access'];
+    unset($implementations['entity_translation_domain_access']);
+    $implementations['entity_translation_domain_access'] = $group;
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function entity_translation_domain_access_menu() {
+  $items = array();
+  $items['admin/structure/domain/view/%domain/entity-translation'] = array(
+    'title' => 'Entity translation languages',
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('entity_translation_domain_access_admin_form', 4),
+    'access arguments' => array('administer domains'),
+    'file' => 'entity_translation_domain_access.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function entity_translation_domain_access_menu_alter(&$items) {
+  foreach (entity_get_info() as $entity_type => $info) {
+    if (entity_translation_enabled($entity_type)) {
+      foreach ($info['translation']['entity_translation']['path schemes'] as $path_scheme) {
+
+        // Replace menu access callbacks with our ones.
+        $path_to_op_map = array();
+        if (isset($path_scheme['edit path'])) {
+          $path_to_op_map += array(
+            $path_scheme['edit path'] . '/add/%entity_translation_language/%entity_translation_language' => 'add',
+            $path_scheme['edit path'] . '/%entity_translation_language' => 'edit',
+          );
+        }
+        if (isset($path_scheme['translate path'])) {
+          $path_to_op_map += array(
+            $path_scheme['translate path'] . '/delete/%entity_translation_language' => 'delete',
+          );
+        }
+        foreach ($path_to_op_map as $path => $op) {
+          if (isset($items[$path])) {
+            array_unshift($items[$path]['access arguments'], $op);
+            array_unshift($items[$path]['access arguments'], $items[$path]['access callback']);
+            $items[$path]['access callback'] = 'entity_translation_domain_access_menu_access_callback';
+            if ($op == 'delete') {
+              $items[$path]['access arguments'][] = count(explode('/', $path)) - 1;
+            }
+          }
+        }
+
+        // Replace original overview page (the Translation tab) callback with
+        // our one.
+        if (isset($path_scheme['translate path']) && isset($items[$path_scheme['translate path']])) {
+          array_unshift($items[$path_scheme['translate path']]['page arguments'], $items[$path_scheme['translate path']]['page callback']);
+          $items[$path_scheme['translate path']]['page callback'] = 'entity_translation_domain_access_overview_wrapper';
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Menu callback for entity translation pages.
+ */
+function entity_translation_domain_access_menu_access_callback() {
+  $args = func_get_args();
+  $original_callback = array_shift($args);
+  $op = array_shift($args);
+  $entity_type = $args[0];
+  $entity = @$args[1];
+  switch ($op) {
+    case 'add':
+      $translation_langcode = $args[3];
+      break;
+    case 'edit':
+      $translation_langcode = $args[2];
+      break;
+    case 'delete':
+      $translation_langcode = array_pop($args);
+      if ($original_callback == 'entity_translation_node_tab_access') {
+        $entity_type = 'node';
+        $entity = $args[0];
+      }
+      break;
+    default:
+      return FALSE;
+  }
+  if (!EntityTranslationDomainAccess::checkAccess($entity_type, $entity, $translation_langcode, $op)) {
+    return FALSE;
+  }
+  return call_user_func_array($original_callback, $args);
+}
+
+/**
+ * Page callback for the entity translations overview page.
+ */
+function entity_translation_domain_access_overview_wrapper() {
+  $args = func_get_args();
+  $original_callback = array_shift($args);
+  $build = call_user_func_array($original_callback, $args);
+  $languages = entity_translation_languages();
+  foreach ($build['entity_translation_overview']['#rows'] as &$row) {
+    $language = array_shift($languages);
+    if (!EntityTranslationDomainAccess::checkAccess($build['#entity_type'], $build['#entity'], $language->language, 'any')) {
+      $row['data'][4] = '';
+    }
+  }
+  unset($row);
+  return $build;
+}

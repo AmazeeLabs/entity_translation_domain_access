@@ -1,0 +1,20 @@
+<?php
+
+/**
+ * Implements hook_install().
+ */
+function entity_translation_domain_access_install() {
+  // This is required to alter menu after the entity_translation does this.
+  /* @see entity_translation_install() */
+  db_update('system')
+    ->fields(array('weight' => 12))
+    ->condition('name', 'entity_translation_domain_access')
+    ->execute();
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function entity_translation_domain_access_uninstall() {
+  variable_del('entity_translation_domain_access_domain_to_languages_map');
+}
