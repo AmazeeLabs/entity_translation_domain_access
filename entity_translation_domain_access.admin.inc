@@ -29,4 +29,5 @@ function entity_translation_domain_access_admin_form($form, &$form_state, $domai
  */
 function entity_translation_domain_access_admin_form_submit(&$form, $form_state) {
   EntityTranslationDomainAccess::setDomainLangcodes($form['#domain_id'], array_filter($form_state['values']['languages']));
+  drupal_set_message(t('The configuration options have been saved.'));
 }
