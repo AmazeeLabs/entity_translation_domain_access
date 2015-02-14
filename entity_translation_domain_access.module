@@ -71,6 +71,13 @@ function entity_translation_domain_access_menu_alter(&$items) {
           }
         }
 
+        // The edit path (ex.: node/%node/edit) if a special one. We do not
+        // replace the access callback, but do replace the page callback.
+        /* @see entity_translation_domain_access_edit_page() */
+        if (isset($items[$path_scheme['edit path']]['page callback']) && $items[$path_scheme['edit path']]['page callback'] == 'entity_translation_edit_page') {
+          $items[$path_scheme['edit path']]['page callback'] = 'entity_translation_domain_access_edit_page';
+        }
+
         // Replace original overview page (the Translation tab) callback with
         // our one.
         if (isset($path_scheme['translate path']) && isset($items[$path_scheme['translate path']])) {
@@ -78,6 +85,34 @@ function entity_translation_domain_access_menu_alter(&$items) {
           $items[$path_scheme['translate path']]['page callback'] = 'entity_translation_domain_access_overview_wrapper';
         }
       }
+    }
+  }
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function entity_translation_domain_access_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Use the same check as entity_translation_menu_local_tasks_alter().
+  $handler = entity_translation_get_handler();
+  if (!empty($handler) && $handler->isEntityForm() && $handler->getLanguage() != LANGUAGE_NONE && drupal_multilingual()) {
+    // Remove translations inaccessible for a user.
+    if (!empty($data['tabs'][1]['output'])) {
+      foreach ($data['tabs'][1]['output'] as $key => $link) {
+        // Double check that we have the correct link.
+        if (isset($link['#link']['access_callback']) && $link['#link']['access_callback'] == 'entity_translation_edit_access') {
+          $args = menu_unserialize($link['#link']['access_arguments'], $link['#link']['map']);
+          $path_parts = explode('/', $link['#link']['href']);
+          $entity_type = $args[0];
+          $entity = $args[1];
+          $translation_langcode = array_pop($path_parts);
+          if (!EntityTranslationDomainAccess::checkAccess($entity_type, $entity, $translation_langcode, 'edit')) {
+            unset($data['tabs'][1]['output'][$key]);
+          }
+        }
+      }
+      $data['tabs'][1]['output'] = array_values($data['tabs'][1]['output']);
+      $data['tabs'][1]['count'] = count($data['tabs'][1]['output']);
     }
   }
 }
@@ -112,6 +147,58 @@ function entity_translation_domain_access_menu_access_callback() {
     return FALSE;
   }
   return call_user_func_array($original_callback, $args);
+}
+
+/**
+ * Entity edit callback that *sometimes* replaces the original one.
+ *
+ * For the normal edit paths (the ones without the /%entity_translation_language
+ * suffix, for example: node/%node/edit) we do not replace the access callback
+ * to prevent missing tabs. For instance:
+ *   - user is on the en/node/1/edit/fr path
+ *   - user has access to the fr translation
+ *   - user has no access to the en translation
+ *   - the en/node/1/edit path uses the content_language as a current
+ *     translation, so it's en in this case
+ *   - the menu system checks access of the node/%node/edit path
+ *   - if it's FALSE, no primary/secondary will be displayed
+ * That's why we should not replace the access callback for the normal edit
+ * paths. Instead, we use this function as a replacement for the
+ * entity_translation_edit_page(). If a user does not have access to the
+ * translation, this function searches for a translation user have access to,
+ * and uses $handler->setFormLanguage() to set it as the current translation
+ * language.
+ *
+ * @see entity_translation_edit_page()
+ */
+function entity_translation_domain_access_edit_page() {
+
+  // The following was copied from the entity_translation_edit_page().
+  $args = func_get_args();
+  $entity_type = array_shift($args);
+  $entity = array_shift($args);
+  $langcode = array_shift($args);
+  $edit_form_item = array_shift($args);
+  $handler = entity_translation_get_handler($entity_type, $entity);
+  $handler->initPathScheme();
+  $langcode = entity_translation_form_language($langcode, $handler);
+  $handler->setFormLanguage($langcode);
+
+  // Here is the custom code goes.
+  if (!EntityTranslationDomainAccess::checkAccess($entity_type, $entity, $langcode, 'edit')) {
+    $translation_langcodes = array_keys($handler->getTranslations()->data);
+    while (!empty($translation_langcodes)) {
+      $translation_langcode = array_shift($translation_langcodes);
+      if (EntityTranslationDomainAccess::checkAccess($entity_type, $entity, $translation_langcode, 'edit')) {
+        $handler->setFormLanguage($translation_langcode);
+        return _entity_translation_callback($edit_form_item['page callback'], $args, $edit_form_item);
+      }
+    }
+    drupal_set_message(t('There are no existing translations you have access to.'), 'error');
+    return MENU_ACCESS_DENIED;
+  }
+
+  return _entity_translation_callback($edit_form_item['page callback'], $args, $edit_form_item);
 }
 
 /**
