@@ -106,7 +106,7 @@ function entity_translation_domain_access_menu_local_tasks_alter(&$data, $router
           $entity_type = $args[0];
           $entity = $args[1];
           $translation_langcode = array_pop($path_parts);
-          if (!EntityTranslationDomainAccess::checkAccess($entity_type, $entity, $translation_langcode, 'edit')) {
+          if (!EntityTranslationDomainAccess::checkTranslationAccess($entity_type, $entity, $translation_langcode, 'edit')) {
             unset($data['tabs'][1]['output'][$key]);
           }
         }
@@ -143,7 +143,7 @@ function entity_translation_domain_access_menu_access_callback() {
     default:
       return FALSE;
   }
-  if (!EntityTranslationDomainAccess::checkAccess($entity_type, $entity, $translation_langcode, $op)) {
+  if (!EntityTranslationDomainAccess::checkTranslationAccess($entity_type, $entity, $translation_langcode, $op)) {
     return FALSE;
   }
   return call_user_func_array($original_callback, $args);
@@ -185,11 +185,11 @@ function entity_translation_domain_access_edit_page() {
   $handler->setFormLanguage($langcode);
 
   // Here is the custom code goes.
-  if (!EntityTranslationDomainAccess::checkAccess($entity_type, $entity, $langcode, 'edit')) {
+  if (!EntityTranslationDomainAccess::checkTranslationAccess($entity_type, $entity, $langcode, 'edit')) {
     $translation_langcodes = array_keys($handler->getTranslations()->data);
     while (!empty($translation_langcodes)) {
       $translation_langcode = array_shift($translation_langcodes);
-      if (EntityTranslationDomainAccess::checkAccess($entity_type, $entity, $translation_langcode, 'edit')) {
+      if (EntityTranslationDomainAccess::checkTranslationAccess($entity_type, $entity, $translation_langcode, 'edit')) {
         $handler->setFormLanguage($translation_langcode);
         return _entity_translation_callback($edit_form_item['page callback'], $args, $edit_form_item);
       }
@@ -211,7 +211,7 @@ function entity_translation_domain_access_overview_wrapper() {
   $languages = entity_translation_languages();
   foreach ($build['entity_translation_overview']['#rows'] as &$row) {
     $language = array_shift($languages);
-    if (!EntityTranslationDomainAccess::checkAccess($build['#entity_type'], $build['#entity'], $language->language, 'any')) {
+    if (!EntityTranslationDomainAccess::checkTranslationAccess($build['#entity_type'], $build['#entity'], $language->language, 'any')) {
       $row['data'][4] = '';
     }
   }
