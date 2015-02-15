@@ -21,6 +21,12 @@ function entity_translation_domain_access_module_implements_alter(&$implementati
     unset($implementations['entity_translation_domain_access']);
     $implementations['entity_translation_domain_access'] = $group;
   }
+  if ($hook == 'node_delete') {
+    // Operate first on node deletion.
+    $group = $implementations['entity_translation_domain_access'];
+    unset($implementations['entity_translation_domain_access']);
+    $implementations = array('entity_translation_domain_access' => $group) + $implementations;
+  }
 }
 
 /**
@@ -43,6 +49,8 @@ function entity_translation_domain_access_menu() {
  * Implements hook_menu_alter().
  */
 function entity_translation_domain_access_menu_alter(&$items) {
+
+  // Alter entity translation paths.
   foreach (entity_get_info() as $entity_type => $info) {
     if (entity_translation_enabled($entity_type)) {
       foreach ($info['translation']['entity_translation']['path schemes'] as $path_scheme) {
@@ -87,6 +95,11 @@ function entity_translation_domain_access_menu_alter(&$items) {
       }
     }
   }
+
+  // Alter the node delete path.
+  array_unshift($items['node/%node/delete']['access arguments'], $items['node/%node/delete']['access callback']);
+  array_unshift($items['node/%node/delete']['access arguments'], 1);
+  $items['node/%node/delete']['access callback'] = 'entity_translation_domain_access_node_delete_access';
 }
 
 /**
@@ -217,4 +230,68 @@ function entity_translation_domain_access_overview_wrapper() {
   }
   unset($row);
   return $build;
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter().
+ */
+function entity_translation_domain_access_form_node_form_alter(&$form, &$form_state) {
+  $node = $form['#node'];
+  if (!EntityTranslationDomainAccess::checkNodeActionAccess($node, 'delete')) {
+    $form['actions']['delete']['#access'] = FALSE;
+  }
+  if (!empty($node->status) && !EntityTranslationDomainAccess::checkNodeActionAccess($node, 'unpublish')) {
+    $form['options']['status']['#disabled'] = TRUE;
+  }
+}
+
+/**
+ * Implements hook_node_presave().
+ */
+function entity_translation_domain_access_node_presave($node) {
+  if (!drupal_is_cli() && !empty($node->original->status) && empty($node->status) && !EntityTranslationDomainAccess::checkNodeActionAccess($node, 'unpublish')) {
+    // The reason to prevent unpublishing in hook_node_presave() is that there
+    // are too many places from where the unpublishing could be performed:
+    //   - node edit form
+    //   - VBO
+    //   - standard admin/content (uses node_mass_update() which does not check
+    //     permission at all)
+    //   - node_unpublish_action()
+    // In most of these cases, we alter the access, so we actually should never
+    // reach this line.
+    $node->status = NODE_PUBLISHED;
+    drupal_set_message(t('The content %title has not been unpublished because either it assigned to domains that you are not assigned to, or it has translations you do not have access to.', array('%title' => entity_label('node', $node))), 'error');
+    watchdog('entity_translation_domain_access', 'Prevented node unpublish attempt. Node: !node, user: !user', array(
+      '!node' => l(entity_label('node', $node), 'node/' . $node->nid),
+      '!user' => l(entity_label('user', $GLOBALS['user']), 'user/' . $GLOBALS['user']->uid),
+    ), WATCHDOG_WARNING);
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function entity_translation_domain_access_node_delete($node) {
+  if (!drupal_is_cli() && !EntityTranslationDomainAccess::checkNodeActionAccess($node, 'delete')) {
+    // We should never reach this line.
+    /* @see entity_translation_domain_access_node_presave() */
+    watchdog('entity_translation_domain_access', 'Prevented node deletion attempt. Node: !node, user: !user', array(
+      '!node' => l(entity_label('node', $node), 'node/' . $node->nid),
+      '!user' => l(entity_label('user', $GLOBALS['user']), 'user/' . $GLOBALS['user']->uid),
+    ), WATCHDOG_WARNING);
+    throw new Exception(t('The content %title cannot be deleted because either it assigned to domains that you are not assigned to, or it has translations you do not have access to.', array('%title' => entity_label('node', $node))));
+  }
+}
+
+/**
+ * Menu access callback for the node/%node/delete path.
+ */
+function entity_translation_domain_access_node_delete_access() {
+  $args = func_get_args();
+  $node = array_shift($args);
+  $callback = array_shift($args);
+  if (!EntityTranslationDomainAccess::checkNodeActionAccess($node, 'delete')) {
+    return FALSE;
+  }
+  return call_user_func_array($callback, $args);
 }
