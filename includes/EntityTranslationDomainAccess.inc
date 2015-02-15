@@ -44,13 +44,7 @@ class EntityTranslationDomainAccess {
     if (user_access('bypass entity translation domain access', $account)) {
       return TRUE;
     }
-    if (!isset($account)) {
-      $account = $GLOBALS['user'];
-    }
-    if (!isset($account->domain_user)) {
-      $account = user_load($account->uid);
-    }
-    if (!array_diff($node->domains, $account->domain_user)) {
+    if (!array_diff($node->domains, self::getUserDomains($account))) {
       $handler = entity_translation_get_handler('node', $node);
       $translation_langcodes = array_keys($handler->getTranslations()->data);
       if (!array_diff($translation_langcodes, self::getUserLangcodes($account))) {
@@ -85,6 +79,28 @@ class EntityTranslationDomainAccess {
   }
 
   /**
+   * Returns an array of domain IDs assigned to the user account.
+   *
+   * @param object|null $account
+   *   User account. If not provided, current user will be used.
+   *
+   * @return array
+   */
+  public static function getUserDomains($account = NULL) {
+    if (!isset($account)) {
+      $account = $GLOBALS['user'];
+    }
+    $cache =& drupal_static(__CLASS__ . '::' . __METHOD__, array());
+    if (!isset($cache[$account->uid])) {
+      if (!isset($account->domain_user)) {
+        $account = user_load($account->uid);
+      }
+      $cache[$account->uid] = empty($account->domain_user) ? array() : $account->domain_user;
+    }
+    return $cache[$account->uid];
+  }
+
+  /**
    * Returns an array of langcodes allowed for a user.
    *
    * @param object|null $account
@@ -93,20 +109,10 @@ class EntityTranslationDomainAccess {
    * @return array
    */
   public static function getUserLangcodes($account = NULL) {
-    if (!isset($account)) {
-      $account = $GLOBALS['user'];
+    $langcodes = array();
+    foreach (self::getUserDomains($account) as $domain_id) {
+      $langcodes = array_merge($langcodes, self::getDomainLangcodes($domain_id));
     }
-    $cache =& drupal_static(__FUNCTION__, array());
-    if (!isset($cache[$account->uid])) {
-      if (!isset($account->domain_user)) {
-        $account = user_load($account->uid);
-      }
-      $langcodes = array();
-      foreach ($account->domain_user as $domain_id) {
-        $langcodes = array_merge($langcodes, self::getDomainLangcodes($domain_id));
-      }
-      $cache[$account->uid] = array_unique($langcodes);
-    }
-    return $cache[$account->uid];
+    return array_unique($langcodes);
   }
 }
