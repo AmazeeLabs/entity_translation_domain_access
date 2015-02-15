@@ -237,12 +237,51 @@ function entity_translation_domain_access_overview_wrapper() {
  */
 function entity_translation_domain_access_form_node_form_alter(&$form, &$form_state) {
   $node = $form['#node'];
+
   if (!EntityTranslationDomainAccess::checkNodeActionAccess($node, 'delete')) {
     $form['actions']['delete']['#access'] = FALSE;
   }
   if (!empty($node->status) && !EntityTranslationDomainAccess::checkNodeActionAccess($node, 'unpublish')) {
     $form['options']['status']['#disabled'] = TRUE;
   }
+
+  // Prevent user to change the "Send to all affiliates" option if he/she is
+  // not assigned to all domains.
+  if (isset($form['domain']['domain_site'])) {
+    if (!user_access('bypass entity translation domain access') && array_diff(array_keys(domain_domains()), EntityTranslationDomainAccess::getUserDomains())) {
+      $form['domain']['domain_site']['#disabled'] = TRUE;
+    }
+  }
+  // Prevent user to assign/unassign node domains he/she is not assigned to.
+  // This is just a cosmetic change and it is not applied if the "domains" form
+  // element is a "select". The real work happens on node save.
+  /* @see entity_translation_domain_access_node_presave() */
+  if (isset($form['domain']['domains'])) {
+    if ($form['domain']['domains']['#type'] == 'checkboxes' && !user_access('bypass entity translation domain access') && array_diff($form['domain']['domains']['#options'], EntityTranslationDomainAccess::getUserDomains())) {
+      $form['domain']['domains']['#after_build'][] = 'entity_translation_domain_access_node_domains_after_build';
+    }
+  }
+}
+
+/**
+ * After build handler for the "domains" checkboxes.
+ *
+ * @see entity_translation_domain_access_form_node_form_alter()
+ * @see entity_translation_domain_access_node_presave()
+ */
+function entity_translation_domain_access_node_domains_after_build($element, &$form_state) {
+  foreach (element_children($element) as $key) {
+    if (!in_array($element[$key]['#return_value'], EntityTranslationDomainAccess::getUserDomains())) {
+      $element[$key]['#attributes']['disabled'] = 'disabled';
+      $element[$key . '_value'] = array(
+        '#type' => 'hidden',
+        '#name' => $element[$key]['#name'],
+        '#value' => $element[$key]['#return_value'],
+      );
+      $element[$key]['#name'] = '';
+    }
+  }
+  return $element;
 }
 
 /**
@@ -265,6 +304,16 @@ function entity_translation_domain_access_node_presave($node) {
       '!node' => l(entity_label('node', $node), 'node/' . $node->nid),
       '!user' => l(entity_label('user', $GLOBALS['user']), 'user/' . $GLOBALS['user']->uid),
     ), WATCHDOG_WARNING);
+  }
+
+  // Prevent user to assign/unassign node domains he/she is not assigned to.
+  if (!user_access('bypass entity translation domain access')) {
+    $user_domains = EntityTranslationDomainAccess::getUserDomains();
+    foreach (domain_domains() as $domain_id => $_) {
+      if (!in_array($domain_id, $user_domains)) {
+        $node->domains[$domain_id] = isset($node->original->domains[$domain_id]) ? $node->original->domains[$domain_id] : 0;
+      }
+    }
   }
 }
 
