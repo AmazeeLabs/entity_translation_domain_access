@@ -344,3 +344,44 @@ function entity_translation_domain_access_node_delete_access() {
   }
   return call_user_func_array($callback, $args);
 }
+
+/**
+ * Implements hook_ctools_plugin_post_alter().
+ */
+function entity_translation_domain_access_ctools_plugin_post_alter(&$plugin, &$info) {
+  if ($info['module'] == 'views_bulk_operations' && $info['type'] == 'operation_types' && $plugin['name'] == 'action') {
+    // We actually need to replace the class. But if we just replace it, it
+    // won't be processed by the ctools_registry_files_alter(), so our class
+    // will not be created because it will extend non existing class.
+    // So, we do the trick:
+    // 1. Register file of original class manually.
+    // 2. Leave $plugin['handler']['file'] unchanged, so Ctools still knows
+    //    where the plugin lives.
+    // 3. Add relative path to $plugin['handler']['file'].
+    $registry_files_alter =& drupal_static('entity_translation_domain_access_registry_files_alter', array());
+    $registry_files_alter[$plugin['path'] . '/' . $plugin['handler']['file']] = array(
+      'module' => 'views_bulk_operations',
+      'weight' => 0,
+    );
+    $relative_path = EntityTranslationDomainAccess::getRelativePath($plugin['path'], drupal_get_path('module', 'entity_translation_domain_access') . '/includes');
+    $plugin['handler']['file'] = $relative_path . '/EntityTranslationDomainAccessViewsBulkOperationsAction.inc';
+    $plugin['handler']['class'] = 'EntityTranslationDomainAccessViewsBulkOperationsAction';
+  }
+}
+
+/**
+ * Implements hook_registry_files_alter().
+ */
+function entity_translation_domain_access_registry_files_alter(&$files, $indexed_modules) {
+  $registry_files_alter =& drupal_static(__FUNCTION__, array());
+  foreach ($registry_files_alter as $path => $info) {
+    $files[$path] = $info;
+  }
+}
+
+/**
+ * Implements hook_views_data_alter().
+ */
+function entity_translation_domain_access_views_data_alter(&$data) {
+  $data['views_entity_node']['delete_node']['field']['handler'] = 'etda_views_handler_field_node_link_delete';
+}
