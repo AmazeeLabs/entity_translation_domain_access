@@ -1,5 +1,5 @@
 name = Entity translation domain access
-description = Resticts entity translation basing on user assigned domains.
+description = Resticts entity translation based on user assigned domains.
 package = Custom
 core = 7.x
 

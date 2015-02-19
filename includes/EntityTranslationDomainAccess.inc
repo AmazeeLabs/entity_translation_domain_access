@@ -41,10 +41,12 @@ class EntityTranslationDomainAccess {
    * @return bool
    */
   public static function checkNodeActionAccess($node, $action, $account = NULL) {
+    // @todo: we should statically cache the results here.
     if (user_access('bypass entity translation domain access', $account)) {
       return TRUE;
     }
-    if (!array_diff($node->domains, self::getUserDomains($account))) {
+    $node_domains = !empty($node->domains) ? $node->domains : array();
+    if (!array_diff($node_domains, self::getUserDomains($account))) {
       $handler = entity_translation_get_handler('node', $node);
       $translation_langcodes = array_keys($handler->getTranslations()->data);
       if (!array_diff($translation_langcodes, self::getUserLangcodes($account))) {
@@ -116,43 +118,4 @@ class EntityTranslationDomainAccess {
     return array_unique($langcodes);
   }
 
-  /**
-   * Returns a relative path between $start_dir and $final_dir.
-   *
-   * @link http://php.net/manual/en/function.realpath.php#76453
-   *
-   * @param string $start_dir
-   * @param string $final_dir
-   *
-   * @return string
-   */
-  public static function getRelativePath($start_dir, $final_dir){
-    $first_path_parts = explode('/', $start_dir);
-    $second_path_parts = explode('/', $final_dir);
-    $same_counter = 0;
-    for ($i = 0; $i < min(count($first_path_parts), count($second_path_parts)); $i++) {
-      if (strtolower($first_path_parts[$i]) !== strtolower($second_path_parts[$i])) {
-        break;
-      }
-      $same_counter++;
-    }
-    if ($same_counter == 0) {
-      return $final_dir;
-    }
-    $new_path = '';
-    for ($i = $same_counter; $i < count($first_path_parts); $i++) {
-      if ($i > $same_counter) {
-        $new_path .= '/';
-      }
-      $new_path .= '..';
-    }
-    if (count($new_path) == 0) {
-      $new_path = '.';
-    }
-    for ($i = $same_counter; $i < count($second_path_parts); $i++) {
-      $new_path .= '/';
-      $new_path .= $second_path_parts[$i];
-    }
-    return $new_path;
-  }
 }

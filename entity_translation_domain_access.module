@@ -1,6 +1,10 @@
 <?php
 
 /**
+ * @file
+ *  Resticts entity translation based on user assigned domains.
+ */
+/**
  * Implements hook_permission().
  */
 function entity_translation_domain_access_permission() {
@@ -194,7 +198,7 @@ function entity_translation_domain_access_edit_page() {
   $edit_form_item = array_shift($args);
   $handler = entity_translation_get_handler($entity_type, $entity);
   $handler->initPathScheme();
-  $langcode = entity_translation_form_language($langcode, $handler);
+  $langcode = entity_translation_get_existing_language($entity_type, $entity, $langcode);
   $handler->setFormLanguage($langcode);
 
   // Here is the custom code goes.
@@ -363,7 +367,7 @@ function entity_translation_domain_access_ctools_plugin_post_alter(&$plugin, &$i
       'module' => 'views_bulk_operations',
       'weight' => 0,
     );
-    $relative_path = EntityTranslationDomainAccess::getRelativePath($plugin['path'], drupal_get_path('module', 'entity_translation_domain_access') . '/includes');
+    $relative_path = entity_translation_domain_access_get_relative_path($plugin['path'], drupal_get_path('module', 'entity_translation_domain_access') . '/includes');
     $plugin['handler']['file'] = $relative_path . '/EntityTranslationDomainAccessViewsBulkOperationsAction.inc';
     $plugin['handler']['class'] = 'EntityTranslationDomainAccessViewsBulkOperationsAction';
   }
@@ -384,4 +388,44 @@ function entity_translation_domain_access_registry_files_alter(&$files, $indexed
  */
 function entity_translation_domain_access_views_data_alter(&$data) {
   $data['views_entity_node']['delete_node']['field']['handler'] = 'etda_views_handler_field_node_link_delete';
+}
+
+/**
+   * Returns a relative path between $start_dir and $final_dir.
+   *
+   * @link http://php.net/manual/en/function.realpath.php#76453
+   *
+   * @param string $start_dir
+   * @param string $final_dir
+   *
+   * @return string
+   */
+function entity_translation_domain_access_get_relative_path($start_dir, $final_dir){
+  $first_path_parts = explode('/', $start_dir);
+  $second_path_parts = explode('/', $final_dir);
+  $same_counter = 0;
+  for ($i = 0; $i < min(count($first_path_parts), count($second_path_parts)); $i++) {
+    if (strtolower($first_path_parts[$i]) !== strtolower($second_path_parts[$i])) {
+      break;
+    }
+    $same_counter++;
+  }
+  if ($same_counter == 0) {
+    return $final_dir;
+  }
+  $new_path = '';
+  for ($i = $same_counter; $i < count($first_path_parts); $i++) {
+    if ($i > $same_counter) {
+      $new_path .= '/';
+    }
+    $new_path .= '..';
+  }
+  if (count($new_path) == 0) {
+    $new_path = '.';
+  }
+  for ($i = $same_counter; $i < count($second_path_parts); $i++) {
+    $new_path .= '/';
+    $new_path .= $second_path_parts[$i];
+  }
+  return $new_path;
 }
