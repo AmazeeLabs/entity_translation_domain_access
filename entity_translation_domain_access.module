@@ -4,6 +4,7 @@
  * @file
  *  Resticts entity translation based on user assigned domains.
  */
+
 /**
  * Implements hook_permission().
  */
@@ -13,6 +14,15 @@ function entity_translation_domain_access_permission() {
       'title' => t('Bypass entity translation domain access'),
     ),
   );
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function entity_translation_domain_access_entity_info_alter(&$info) {
+  if (!empty($info['node']['translation']['entity_translation'])) {
+    $info['node']['translation']['entity_translation']['class'] = 'ETDAEntityTranslationNodeHandler';
+  }
 }
 
 /**
@@ -89,21 +99,10 @@ function entity_translation_domain_access_menu_alter(&$items) {
         if (isset($items[$path_scheme['edit path']]['page callback']) && $items[$path_scheme['edit path']]['page callback'] == 'entity_translation_edit_page') {
           $items[$path_scheme['edit path']]['page callback'] = 'entity_translation_domain_access_edit_page';
         }
-
-        // Replace original overview page (the Translation tab) callback with
-        // our one.
-        if (isset($path_scheme['translate path']) && isset($items[$path_scheme['translate path']])) {
-          array_unshift($items[$path_scheme['translate path']]['page arguments'], $items[$path_scheme['translate path']]['page callback']);
-          $items[$path_scheme['translate path']]['page callback'] = 'entity_translation_domain_access_overview_wrapper';
-        }
       }
     }
   }
 
-  // Alter the node delete path.
-  array_unshift($items['node/%node/delete']['access arguments'], $items['node/%node/delete']['access callback']);
-  array_unshift($items['node/%node/delete']['access arguments'], 1);
-  $items['node/%node/delete']['access callback'] = 'entity_translation_domain_access_node_delete_access';
 }
 
 /**
@@ -132,6 +131,18 @@ function entity_translation_domain_access_menu_local_tasks_alter(&$data, $router
       $data['tabs'][1]['count'] = count($data['tabs'][1]['output']);
     }
   }
+}
+
+/**
+ * Implements hook_node_access();
+ */
+function entity_translation_domain_access_node_access($node, $op, $account) {
+  if ($op == 'delete') {
+    if (!EntityTranslationDomainAccess::checkNodeActionAccess($node, $op)) {
+      return NODE_ACCESS_DENY;
+    }
+  }
+  return NODE_ACCESS_IGNORE;
 }
 
 /**
@@ -219,32 +230,11 @@ function entity_translation_domain_access_edit_page() {
 }
 
 /**
- * Page callback for the entity translations overview page.
- */
-function entity_translation_domain_access_overview_wrapper() {
-  $args = func_get_args();
-  $original_callback = array_shift($args);
-  $build = call_user_func_array($original_callback, $args);
-  $languages = entity_translation_languages();
-  foreach ($build['entity_translation_overview']['#rows'] as &$row) {
-    $language = array_shift($languages);
-    if (!EntityTranslationDomainAccess::checkTranslationAccess($build['#entity_type'], $build['#entity'], $language->language, 'any')) {
-      $row['data'][4] = '';
-    }
-  }
-  unset($row);
-  return $build;
-}
-
-/**
  * Implements hook_form_BASE_FORM_ID_alter().
  */
 function entity_translation_domain_access_form_node_form_alter(&$form, &$form_state) {
   $node = $form['#node'];
 
-  if (!EntityTranslationDomainAccess::checkNodeActionAccess($node, 'delete')) {
-    $form['actions']['delete']['#access'] = FALSE;
-  }
   if (!empty($node->status) && !EntityTranslationDomainAccess::checkNodeActionAccess($node, 'unpublish')) {
     $form['options']['status']['#disabled'] = TRUE;
   }
@@ -322,34 +312,6 @@ function entity_translation_domain_access_node_presave($node) {
 }
 
 /**
- * Implements hook_node_delete().
- */
-function entity_translation_domain_access_node_delete($node) {
-  if (!drupal_is_cli() && !EntityTranslationDomainAccess::checkNodeActionAccess($node, 'delete')) {
-    // We should never reach this line.
-    /* @see entity_translation_domain_access_node_presave() */
-    watchdog('entity_translation_domain_access', 'Prevented node deletion attempt. Node: !node, user: !user', array(
-      '!node' => l(entity_label('node', $node), 'node/' . $node->nid),
-      '!user' => l(entity_label('user', $GLOBALS['user']), 'user/' . $GLOBALS['user']->uid),
-    ), WATCHDOG_WARNING);
-    throw new Exception(t('The content %title cannot be deleted because either it assigned to domains that you are not assigned to, or it has translations you do not have access to.', array('%title' => entity_label('node', $node))));
-  }
-}
-
-/**
- * Menu access callback for the node/%node/delete path.
- */
-function entity_translation_domain_access_node_delete_access() {
-  $args = func_get_args();
-  $node = array_shift($args);
-  $callback = array_shift($args);
-  if (!EntityTranslationDomainAccess::checkNodeActionAccess($node, 'delete')) {
-    return FALSE;
-  }
-  return call_user_func_array($callback, $args);
-}
-
-/**
  * Implements hook_ctools_plugin_post_alter().
  */
 function entity_translation_domain_access_ctools_plugin_post_alter(&$plugin, &$info) {
@@ -381,13 +343,6 @@ function entity_translation_domain_access_registry_files_alter(&$files, $indexed
   foreach ($registry_files_alter as $path => $info) {
     $files[$path] = $info;
   }
-}
-
-/**
- * Implements hook_views_data_alter().
- */
-function entity_translation_domain_access_views_data_alter(&$data) {
-  $data['views_entity_node']['delete_node']['field']['handler'] = 'etda_views_handler_field_node_link_delete';
 }
 
 /**

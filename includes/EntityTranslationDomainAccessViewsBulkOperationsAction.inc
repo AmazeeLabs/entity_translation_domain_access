@@ -21,13 +21,6 @@ class EntityTranslationDomainAccessViewsBulkOperationsAction extends ViewsBulkOp
             return;
           }
           break;
-
-        case 'action::views_bulk_operations_delete_item':
-          if (!EntityTranslationDomainAccess::checkNodeActionAccess($node, 'delete')) {
-            drupal_set_message(t('The content %title has not been deleted because either it assigned to domains that you are not assigned to, or it has translations you do not have access to.', array('%title' => entity_label('node', $node))), 'warning');
-            return;
-          }
-          break;
       }
     }
     parent::execute($data, $context);
