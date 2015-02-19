@@ -52,18 +52,6 @@ function entity_translation_domain_access_entity_info_alter(&$info) {
 }
 
 /**
- * Implements hook_module_implements_alter().
- */
-function entity_translation_domain_access_module_implements_alter(&$implementations, $hook) {
-  if ($hook == 'menu_alter') {
-    // Alter menu after the entity_translation does this.
-    $group = $implementations['entity_translation_domain_access'];
-    unset($implementations['entity_translation_domain_access']);
-    $implementations['entity_translation_domain_access'] = $group;
-  }
-}
-
-/**
  * Implements hook_menu().
  */
 function entity_translation_domain_access_menu() {
@@ -77,52 +65,6 @@ function entity_translation_domain_access_menu() {
     'file' => 'entity_translation_domain_access.admin.inc',
   );
   return $items;
-}
-
-/**
- * Implements hook_menu_alter().
- */
-function entity_translation_domain_access_menu_alter(&$items) {
-
-  // Alter entity translation paths.
-  foreach (entity_get_info() as $entity_type => $info) {
-    if (entity_translation_enabled($entity_type)) {
-      foreach ($info['translation']['entity_translation']['path schemes'] as $path_scheme) {
-
-        // Replace menu access callbacks with our ones.
-        $path_to_op_map = array();
-        if (isset($path_scheme['edit path'])) {
-          $path_to_op_map += array(
-            $path_scheme['edit path'] . '/add/%entity_translation_language/%entity_translation_language' => 'add',
-            $path_scheme['edit path'] . '/%entity_translation_language' => 'edit',
-          );
-        }
-        if (isset($path_scheme['translate path'])) {
-          $path_to_op_map += array(
-            $path_scheme['translate path'] . '/delete/%entity_translation_language' => 'delete',
-          );
-        }
-        foreach ($path_to_op_map as $path => $op) {
-          if (isset($items[$path])) {
-            array_unshift($items[$path]['access arguments'], $op);
-            array_unshift($items[$path]['access arguments'], $items[$path]['access callback']);
-            $items[$path]['access callback'] = 'entity_translation_domain_access_menu_access_callback';
-            if ($op == 'delete') {
-              $items[$path]['access arguments'][] = count(explode('/', $path)) - 1;
-            }
-          }
-        }
-
-        // The edit path (ex.: node/%node/edit) if a special one. We do not
-        // replace the access callback, but do replace the page callback.
-        /* @see entity_translation_domain_access_edit_page() */
-        if (isset($items[$path_scheme['edit path']]['page callback']) && $items[$path_scheme['edit path']]['page callback'] == 'entity_translation_edit_page') {
-          $items[$path_scheme['edit path']]['page callback'] = 'entity_translation_domain_access_edit_page';
-        }
-      }
-    }
-  }
-
 }
 
 /**
@@ -163,90 +105,6 @@ function entity_translation_domain_access_node_access($node, $op, $account) {
     }
   }
   return NODE_ACCESS_IGNORE;
-}
-
-/**
- * Menu callback for entity translation pages.
- */
-function entity_translation_domain_access_menu_access_callback() {
-  $args = func_get_args();
-  $original_callback = array_shift($args);
-  $op = array_shift($args);
-  $entity_type = $args[0];
-  $entity = @$args[1];
-  switch ($op) {
-    case 'add':
-      $translation_langcode = $args[3];
-      break;
-    case 'edit':
-      $translation_langcode = $args[2];
-      break;
-    case 'delete':
-      $translation_langcode = array_pop($args);
-      if ($original_callback == 'entity_translation_node_tab_access') {
-        $entity_type = 'node';
-        $entity = $args[0];
-      }
-      break;
-    default:
-      return FALSE;
-  }
-  if (!EntityTranslationDomainAccess::checkTranslationAccess($entity_type, $entity, $translation_langcode, $op)) {
-    return FALSE;
-  }
-  return call_user_func_array($original_callback, $args);
-}
-
-/**
- * Entity edit callback that *sometimes* replaces the original one.
- *
- * For the normal edit paths (the ones without the /%entity_translation_language
- * suffix, for example: node/%node/edit) we do not replace the access callback
- * to prevent missing tabs. For instance:
- *   - user is on the en/node/1/edit/fr path
- *   - user has access to the fr translation
- *   - user has no access to the en translation
- *   - the en/node/1/edit path uses the content_language as a current
- *     translation, so it's en in this case
- *   - the menu system checks access of the node/%node/edit path
- *   - if it's FALSE, no primary/secondary will be displayed
- * That's why we should not replace the access callback for the normal edit
- * paths. Instead, we use this function as a replacement for the
- * entity_translation_edit_page(). If a user does not have access to the
- * translation, this function searches for a translation user have access to,
- * and uses $handler->setFormLanguage() to set it as the current translation
- * language.
- *
- * @see entity_translation_edit_page()
- */
-function entity_translation_domain_access_edit_page() {
-
-  // The following was copied from the entity_translation_edit_page().
-  $args = func_get_args();
-  $entity_type = array_shift($args);
-  $entity = array_shift($args);
-  $langcode = array_shift($args);
-  $edit_form_item = array_shift($args);
-  $handler = entity_translation_get_handler($entity_type, $entity);
-  $handler->initPathScheme();
-  $langcode = entity_translation_get_existing_language($entity_type, $entity, $langcode);
-  $handler->setFormLanguage($langcode);
-
-  // Here is the custom code goes.
-  if (!EntityTranslationDomainAccess::checkTranslationAccess($entity_type, $entity, $langcode, 'edit')) {
-    $translation_langcodes = array_keys($handler->getTranslations()->data);
-    while (!empty($translation_langcodes)) {
-      $translation_langcode = array_shift($translation_langcodes);
-      if (EntityTranslationDomainAccess::checkTranslationAccess($entity_type, $entity, $translation_langcode, 'edit')) {
-        $handler->setFormLanguage($translation_langcode);
-        return _entity_translation_callback($edit_form_item['page callback'], $args, $edit_form_item);
-      }
-    }
-    drupal_set_message(t('There are no existing translations you have access to.'), 'error');
-    return MENU_ACCESS_DENIED;
-  }
-
-  return _entity_translation_callback($edit_form_item['page callback'], $args, $edit_form_item);
 }
 
 /**
