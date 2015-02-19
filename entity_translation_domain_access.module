@@ -17,6 +17,32 @@ function entity_translation_domain_access_permission() {
 }
 
 /**
+ * Implements hook_init().
+ *
+ * @todo: THIS MUST BE PORTED LATER INTO THE REDIRECTOR MODULE.
+ */
+function entity_translation_domain_access_init() {
+  if(arg(0) == 'node' && is_numeric(arg(1)) && $node = node_load(arg(1))) {
+    $current_domain = domain_get_domain();
+    $domains = domain_get_node_domains($node->nid);
+    if (!in_array($current_domain['domain_id'], $domains['domain_id'])) {
+      $destination_domain = domain_lookup(reset($domains['domain_id']));
+      // No destination allowed here.
+      unset($_GET['destination']);
+      if (!empty($destination_domain['variants'])) {
+        drupal_goto($_GET['q'], array('domain_variant' => reset($destination_domain['variants'])), 301);
+      }
+      else {
+        if ($destination_domain['domain_id'] > 0 && $current_domain['domain_id'] != $destination_domain['domain_id']) {
+          $path = domain_get_uri($destination_domain);
+          drupal_goto($path, array(), 301);
+        }
+      }
+    }
+  }
+}
+
+/**
  * Implements hook_entity_info_alter().
  */
 function entity_translation_domain_access_entity_info_alter(&$info) {
@@ -34,12 +60,6 @@ function entity_translation_domain_access_module_implements_alter(&$implementati
     $group = $implementations['entity_translation_domain_access'];
     unset($implementations['entity_translation_domain_access']);
     $implementations['entity_translation_domain_access'] = $group;
-  }
-  if ($hook == 'node_delete') {
-    // Operate first on node deletion.
-    $group = $implementations['entity_translation_domain_access'];
-    unset($implementations['entity_translation_domain_access']);
-    $implementations = array('entity_translation_domain_access' => $group) + $implementations;
   }
 }
 
@@ -251,31 +271,56 @@ function entity_translation_domain_access_form_node_form_alter(&$form, &$form_st
   // element is a "select". The real work happens on node save.
   /* @see entity_translation_domain_access_node_presave() */
   if (isset($form['domain']['domains'])) {
-    if ($form['domain']['domains']['#type'] == 'checkboxes' && !user_access('bypass entity translation domain access') && array_diff($form['domain']['domains']['#options'], EntityTranslationDomainAccess::getUserDomains())) {
-      $form['domain']['domains']['#after_build'][] = 'entity_translation_domain_access_node_domains_after_build';
+    if ($form['domain']['domains']['#type'] == 'checkboxes' && !user_access('bypass entity translation domain access')) {
+      // Disable the domains for which the user does not have access.
+      $diff_domains = array_diff_key($form['domain']['domains']['#options'], EntityTranslationDomainAccess::getUserDomains());
+      if (!empty($diff_domains)) {
+        foreach ($diff_domains as $domain_key => $value) {
+          $form['domain']['domains'][$domain_key]['#disabled'] = TRUE;
+        }
+      }
+      // We handle the required property ourselves.
+      $form['domain']['domains']['#required'] = FALSE;
+      $form['domain']['domains']['#element_validate'][] = 'entity_translation_domain_access_validate_node_domains';
     }
+  }
+
+  // Remove the languages for which the user does not have access, but only if
+  // the field is not disabled.
+  if (!empty($form['language']['#options']) && !user_access('bypass entity translation domain access') && empty($form['language']['#disabled'])) {
+    $form['language']['#options'] = array_intersect_key($form['language']['#options'], EntityTranslationDomainAccess::getUserLangcodes());
+  }
+  // Additional submit handler to make sure we redirect to the node view page.
+  $form['actions']['submit']['#submit'][] = 'entity_translation_domain_access_node_form_submit';
+}
+
+/**
+ * Additional submit handler that will make sure that we redirect to the node
+ * when the destination is 'front'. This can happen when a node is added to some
+ * domain while the current domain is different. In this case we still want to
+ * lead to the node because the user will be redirected afterwards.
+ */
+function entity_translation_domain_access_node_form_submit(&$form, &$form_state) {
+  // @todo: should we have a different check here? Maybe to check that if the
+  // user does NOT have access to the node, we still redirect there.
+  if ($form_state['redirect'] == '<front>') {
+    $form_state['redirect'] = 'node/' . $form_state['node']->nid;
   }
 }
 
 /**
- * After build handler for the "domains" checkboxes.
- *
- * @see entity_translation_domain_access_form_node_form_alter()
- * @see entity_translation_domain_access_node_presave()
+ * Custom validation for the domains. We make sure that the node has at least
+ * one domain selected.
  */
-function entity_translation_domain_access_node_domains_after_build($element, &$form_state) {
-  foreach (element_children($element) as $key) {
-    if (!in_array($element[$key]['#return_value'], EntityTranslationDomainAccess::getUserDomains())) {
-      $element[$key]['#attributes']['disabled'] = 'disabled';
-      $element[$key . '_value'] = array(
-        '#type' => 'hidden',
-        '#name' => $element[$key]['#name'],
-        '#value' => $element[$key]['#return_value'],
-      );
-      $element[$key]['#name'] = '';
+function entity_translation_domain_access_validate_node_domains($element, &$form_state) {
+  $selected_domains = array_filter($form_state['values']['domains']);
+  // If the user did not select any domain, we have to make sure that the node
+  // domains contain at least one domain where the user does not have access.
+  if (empty($selected_domains)) {
+    if (empty($form_state['node']->domains) || array_diff_key($form_state['node']->domains, EntityTranslationDomainAccess::getUserDomains()) == FALSE) {
+      form_set_error('domains', t('You have to select at least one domain.'));
     }
   }
-  return $element;
 }
 
 /**
