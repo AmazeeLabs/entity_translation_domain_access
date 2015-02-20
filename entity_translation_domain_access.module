@@ -251,6 +251,22 @@ function entity_translation_domain_access_form_taxonomy_overview_terms_alter(&$f
 }
 
 /**
+ * Implements hook_form_FORM_ID_alter for i18n_string_translate_page_overview_form()
+ */
+function entity_translation_domain_access_form_i18n_string_translate_page_overview_form_alter(&$form, &$form_state) {
+  // Remove the operations (which at the moment contains only the 'translate'
+  // link, but if this will contain other things, then we have to change this
+  // code. The problem is that at this point the operations column contains
+  // already html, so if we want to remove only the translate link we have to
+  // do some regex on it).
+  foreach ($form['languages']['#rows'] as $langcode => $values) {
+    if (!EntityTranslationDomainAccess::canTranslateToLanguage($langcode)) {
+      $form['languages']['#rows'][$langcode]['operations'] = '';
+    }
+  }
+}
+
+/**
  * Custom validation for the domains. We make sure that the node has at least
  * one domain selected.
  */

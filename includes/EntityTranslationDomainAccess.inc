@@ -28,6 +28,19 @@ class EntityTranslationDomainAccess {
   }
 
   /**
+   * Checks if an user can translate in general to a specific language.
+   *
+   * @param string $langcode
+   *  The language code.
+   *
+   * @param object $account
+   *  Optional, an user object to check.
+   */
+  public static function canTranslateToLanguage($langcode, $account = NULL) {
+    return in_array($langcode, self::getUserLangcodes($account));
+  }
+
+  /**
    * Checks if user is allowed to perform an action on a node.
    *
    * @param object $node
