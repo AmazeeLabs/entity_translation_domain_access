@@ -237,20 +237,14 @@ function entity_translation_domain_access_form_taxonomy_overview_terms_alter(&$f
       if (!$handler->getTranslationAccess($langcode)) {
         $form[$key]['edit']['#title'] = t('translate');
         $form[$key]['edit']['#href'] = 'taxonomy/term/' . $term->tid . '/translate';
-        // We do not want any options (like the destination) on the new link/
-        if (!empty($form[$key]['edit']['#options'])) {
-          unset($form[$key]['edit']['#options']);
-        }
+        $form[$key]['edit']['#options']['query']['destination'] = 'taxonomy/term/' . $term->tid . '/translate';
       }
       else {
         $template_link = $form[$key]['edit'];
         $form[$key]['edit'] = array('edit' => $template_link, 'sep' => array('#markup' => ' | '), 'translate' => $template_link);
         $form[$key]['edit']['translate']['#title'] = t('translate');
         $form[$key]['edit']['translate']['#href'] = 'taxonomy/term/' . $term->tid . '/translate';
-        // We do not want any options (like the destination) on the new link/
-        if (!empty($form[$key]['edit']['translate']['#options'])) {
-          unset($form[$key]['edit']['translate']['#options']);
-        }
+        $form[$key]['edit']['translate']['#options']['query']['destination'] = 'taxonomy/term/' . $term->tid . '/translate';
       }
     }
   }
