@@ -287,3 +287,13 @@ function entity_translation_domain_access_get_relative_path($start_dir, $final_d
   }
   return $new_path;
 }
+
+/**
+ * Helper function to reset the domain node settings.
+ */
+function _entity_translation_domain_access_reset_domain_node_settings() {
+  $node_types = node_type_get_names();
+  foreach ($node_types as $type_key => $type_name) {
+    variable_set('domain_node_' . $type_key, array());
+  }
+}
