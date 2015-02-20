@@ -66,7 +66,7 @@ function entity_translation_domain_access_menu_alter(&$items) {
   // current implementation does not check if the user really has access to
   // translate in this langcode.
   foreach ($items as $key => $item) {
-    if ($item['access callback'] === 'entity_translation_add_access') {
+    if (!empty($item['access callback']) && $item['access callback'] === 'entity_translation_add_access') {
       $items[$key]['access callback'] = 'entity_translation_domain_access_add_access';
     }
   }
