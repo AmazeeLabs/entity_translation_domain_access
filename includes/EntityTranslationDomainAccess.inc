@@ -37,7 +37,7 @@ class EntityTranslationDomainAccess {
    *  Optional, an user object to check.
    */
   public static function canTranslateToLanguage($langcode, $account = NULL) {
-    return in_array($langcode, self::getUserLangcodes($account));
+    return user_access('bypass entity translation domain access', $account) || in_array($langcode, self::getUserLangcodes($account));
   }
 
   /**
