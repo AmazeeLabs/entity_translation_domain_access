@@ -433,3 +433,24 @@ function _entity_translation_domain_access_reset_domain_node_settings() {
     variable_set('domain_node_' . $type_key, array());
   }
 }
+
+/**
+ * Implements hook_views_data().
+ */
+function entity_translation_domain_access_views_data() {
+  $data = array();
+
+  $data['node']['entity_translation_domain_access_edit_node']['moved to'] = array(
+    'views_entity_node',
+    'entity_translation_domain_access_edit_node',
+  );
+  $data['views_entity_node']['entity_translation_domain_access_edit_node'] = array(
+    'field' => array(
+      'title' => t('Edit link (with ETDA support)'),
+      'help' => t('Provide a simple link to the node Edit page. Entity Translation Domain Access support: additionally checks if user can edit a translation.'),
+      'handler' => 'entity_translation_domain_access_views_handler_field_node_link_edit',
+    ),
+  );
+
+  return $data;
+}
