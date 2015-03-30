@@ -70,6 +70,22 @@ function entity_translation_domain_access_menu_alter(&$items) {
       $items[$key]['access callback'] = 'entity_translation_domain_access_add_access';
     }
   }
+
+  $items['node/%node/translate']['access callback'] = 'entity_translation_domain_access_node_tab_access';
+}
+
+/**
+ * Access callback for the node/%/translate path.
+ *
+ * SIG-447 We don't need to show the translate tab if user has no edit access.
+ */
+function entity_translation_domain_access_node_tab_access() {
+  $args = func_get_args();
+  $node = reset($args);
+  if (!node_access('update', $node)) {
+    return FALSE;
+  }
+  return call_user_func_array('entity_translation_node_tab_access', $args);
 }
 
 /**
