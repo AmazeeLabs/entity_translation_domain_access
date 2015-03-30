@@ -24,7 +24,18 @@ class EntityTranslationDomainAccess {
    * @return bool
    */
   public static function checkTranslationAccess($entity_type, $entity, $translation_langcode, $op, $account = NULL) {
-    return user_access('bypass entity translation domain access', $account) || in_array($translation_langcode, self::getUserLangcodes($account));
+    if (user_access('bypass entity translation domain access', $account)) {
+      return TRUE;
+    }
+    if ($op == 'edit' || $op == 'delete') {
+      $handler = entity_translation_get_handler($entity_type, $entity);
+      $translations = $handler->getTranslations();
+      if (!isset($translations->data[$translation_langcode])) {
+        // We can't edit/delete non-existing translation.
+        return FALSE;
+      }
+    }
+    return in_array($translation_langcode, self::getUserLangcodes($account));
   }
 
   /**

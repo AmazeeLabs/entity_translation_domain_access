@@ -9,3 +9,4 @@ dependencies[] = entity_translation
 files[] = includes/EntityTranslationDomainAccess.inc
 files[] = includes/ETDAEntityTranslationNodeHandler.inc
 files[] = includes/ETDAEntityTranslationTaxonomyTermHandler.inc
+files[] = includes/entity_translation_domain_access_views_handler_field_node_link_edit.inc
