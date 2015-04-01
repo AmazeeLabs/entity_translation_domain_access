@@ -69,7 +69,7 @@ class EntityTranslationDomainAccess {
     if (user_access('bypass entity translation domain access', $account)) {
       return TRUE;
     }
-    $node_domains = !empty($node->domains) ? $node->domains : array();
+    $node_domains = !empty($node->domains) ? array_filter($node->domains) : array();
     if (!array_diff($node_domains, self::getUserDomains($account))) {
       $handler = entity_translation_get_handler('node', $node);
       $translation_langcodes = array_keys($handler->getTranslations()->data);
