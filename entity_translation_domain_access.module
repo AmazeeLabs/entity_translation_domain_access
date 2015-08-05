@@ -14,7 +14,7 @@ function entity_translation_domain_access_init() {
   if(arg(0) == 'node' && is_numeric(arg(1)) && $node = node_load(arg(1))) {
     $current_domain = domain_get_domain();
     $domains = domain_get_node_domains($node->nid);
-    if (!in_array($current_domain['domain_id'], $domains['domain_id'])) {
+    if (empty($domains['domain_site']) && !in_array($current_domain['domain_id'], $domains['domain_id'])) {
       $destination_domain = domain_lookup(reset($domains['domain_id']));
       // No destination allowed here.
       unset($_GET['destination']);
