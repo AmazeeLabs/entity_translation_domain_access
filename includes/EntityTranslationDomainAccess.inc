@@ -24,7 +24,18 @@ class EntityTranslationDomainAccess {
    * @return bool
    */
   public static function checkTranslationAccess($entity_type, $entity, $translation_langcode, $op, $account = NULL) {
-    return user_access('bypass entity translation domain access', $account) || in_array($translation_langcode, self::getUserLangcodes($account));
+    if (user_access('bypass entity translation domain access', $account)) {
+      return TRUE;
+    }
+    if ($op == 'edit' || $op == 'delete') {
+      $handler = entity_translation_get_handler($entity_type, $entity);
+      $translations = $handler->getTranslations();
+      if (!isset($translations->data[$translation_langcode])) {
+        // We can't edit/delete non-existing translation.
+        return FALSE;
+      }
+    }
+    return in_array($translation_langcode, self::getUserLangcodes($account));
   }
 
   /**
@@ -37,7 +48,7 @@ class EntityTranslationDomainAccess {
    *  Optional, an user object to check.
    */
   public static function canTranslateToLanguage($langcode, $account = NULL) {
-    return in_array($langcode, self::getUserLangcodes($account));
+    return user_access('bypass entity translation domain access', $account) || in_array($langcode, self::getUserLangcodes($account));
   }
 
   /**
@@ -58,7 +69,7 @@ class EntityTranslationDomainAccess {
     if (user_access('bypass entity translation domain access', $account)) {
       return TRUE;
     }
-    $node_domains = !empty($node->domains) ? $node->domains : array();
+    $node_domains = !empty($node->domains) ? array_filter($node->domains) : array();
     if (!array_diff($node_domains, self::getUserDomains($account))) {
       $handler = entity_translation_get_handler('node', $node);
       $translation_langcodes = array_keys($handler->getTranslations()->data);
